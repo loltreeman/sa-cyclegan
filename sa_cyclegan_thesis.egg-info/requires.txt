@@ -1,0 +1,15 @@
+numpy
+scipy
+pandas
+pyarrow
+pyyaml
+opencv-python
+pillow
+tqdm
+matplotlib
+albumentations==2.0.8
+thop
+
+[dev]
+pytest
+pytest-cov

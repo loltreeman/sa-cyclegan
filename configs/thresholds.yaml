@@ -1,0 +1,17 @@
+# Every null here is a MEASUREMENT you do not have yet.
+# Each one corresponds to a placeholder in the manuscript.
+# The loader RAISES on null rather than defaulting — a silent default
+# would mis-stratify every result in Chapter IV.
+
+tau_ir:    null   # ⟦τ_IR⟧    §3.2.4.2  colour-divergence IR screen
+tau_glare: null   # ⟦τ_glare⟧ §3.2.4.2  saturated-pixel fraction
+t1:        null   # ⟦t1⟧      §3.2.4.2  severe/moderate luminance cut
+t2:        null   # ⟦t2⟧      §3.2.4.2  moderate/normal luminance cut
+ir_disposition: null   # "A" or "B"     §3.2.4.2, set by the IR fraction
+n_aug:     null   # [[N_aug]] §3.4.5    supplementary augmented frames
+k_folds:   5      # ⟦k⟧       §3.2.5    asserted against event count
+
+# Pending confirmation from the ALIVE source group, not a measurement of ours.
+# §3.5.5 states our extraction interval as 15 s and flags the inherited
+# corpus's interval as unknown; where they differ, the discrepancy is reported.
+alive_extraction_interval_s: null

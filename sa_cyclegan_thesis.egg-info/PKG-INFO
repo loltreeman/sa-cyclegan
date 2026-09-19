@@ -1,0 +1,18 @@
+Metadata-Version: 2.4
+Name: sa-cyclegan-thesis
+Version: 0.1.0
+Requires-Python: >=3.12
+Requires-Dist: numpy
+Requires-Dist: scipy
+Requires-Dist: pandas
+Requires-Dist: pyarrow
+Requires-Dist: pyyaml
+Requires-Dist: opencv-python
+Requires-Dist: pillow
+Requires-Dist: tqdm
+Requires-Dist: matplotlib
+Requires-Dist: albumentations==2.0.8
+Requires-Dist: thop
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: pytest-cov; extra == "dev"

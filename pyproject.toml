@@ -1,0 +1,34 @@
+[project]
+name = "sa-cyclegan-thesis"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "numpy", "scipy", "pandas", "pyarrow", "pyyaml",
+  "opencv-python", "pillow", "tqdm", "matplotlib",
+  "albumentations==2.0.8",
+]
+
+# thop is NOT listed. Ultralytics ships its own fork, `ultralytics-thop`, which
+# installs under the SAME module name `thop`. Listing plain thop here makes
+# `pip install -e .` overwrite the fork, and the leftover profiling hooks then
+# crash the first training step with
+#   AttributeError: 'ReLU' object has no attribute 'total_ops'
+# The GFLOPs figures in §3.6.3 come from whichever `thop` module is importable,
+# so let ultralytics-thop own it.
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-cov"]
+
+# NOTE: ultralytics and torch are deliberately NOT listed, so that
+# `pip install -e .` can never clobber a hand-built torch install.
+#
+# CUDA (the real path, RTX 4050 / RTX 3060): install torch from the PyTorch
+# index FIRST, then `pip install ultralytics==8.4.154`. See README.
+#
+# ROCm (contingency, only if the RX 9060 XT materialises): ROCm torch from
+# repo.radeon.com first, then `pip install --no-deps ultralytics==8.4.154`
+# plus cloudpickle nvidia-ml-py polars requests ultralytics-platform
+# ultralytics-thop. Without --no-deps pip pulls CUDA torch and clobbers ROCm.
+
+[tool.setuptools.packages.find]
+include = ["src*"]

@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+data/
+runs/
+ckpt/
+*.parquet
+*.pt
+.pytest_cache/
+
+# Claude Code
+CLAUDE.local.md
+.claude/settings.local.json
+runs/

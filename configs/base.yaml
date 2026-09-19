@@ -1,0 +1,161 @@
+# Every §3.3/§3.4 hyperparameter, exactly once. Each block cites the section
+# it is read from. If you change a number here, change the manuscript too —
+# a value that appears in only one of the two is a defect in the other.
+#
+# Values marked CONFIRM are NOT stated anywhere in the manuscript. They are the
+# original CycleGAN/pix2pix defaults the architecture sections say they follow.
+# They are implementation choices, not manuscript values — defensible as "the
+# reference implementation's widths", but do not cite a section for them.
+
+seed: 0
+
+versions:
+  # Pinned in §3.7.2. torch is recorded AFTER installation, from
+  #   python -c "import torch; print(torch.__version__)"
+  # It is not a target to install against — see README.
+  ultralytics: "8.4.154"
+  albumentations: "2.0.8"
+  torch: null          # fill in with the actual +cuXXX build once installed
+
+# ---------------------------------------------------------------- detectors
+# §3.4. Two-stage curriculum: Stage 1 condition-specific, Stage 2 common
+# real-data fine-tuning. §3.5.4.
+detectors:
+  imgsz: 640                    # §3.4.1, §3.4.2 — both architectures
+
+  stage1:
+    epochs: 100                 # §3.4.3 table
+    patience: 10                # §3.4.3 — NOT a framework default (that is 100)
+    freeze_epochs: 10           # §3.4.4 — backbone frozen for the first 10
+    unfreeze_lr_factor: 0.1     # §3.4.4 — then end-to-end at lr0 / 10
+
+  stage2:
+    epochs: 10                  # §3.4.4 — "all Stage 2 runs execute the full 10"
+    patience: null              # §3.4.4 — early stopping DISABLED in Stage 2
+    freeze_epochs: 0            # §3.4.4 — backbone unfrozen throughout
+    lr_factor: 0.1              # §3.4.4 — lr0 / 10, same rate Stage 1 ended at
+
+  # Equalized across architectures — the rows ABOVE the divider in §3.4.3.
+  shared:
+    cos_lr: false               # framework default; linear decay, NOT cosine
+    lrf: 0.01                   # framework default; final lr = lr0 * lrf
+    warmup_epochs: 3            # §3.4.3 table, both architectures, unit = EPOCHS
+    mosaic: 1.0                 # §3.4.1 — held constant across all conditions
+    mixup: 0.0                  # §3.4.1 — disabled by decision
+    cutmix: 0.0                 # §3.4.1 — disabled by decision
+    save_period: 5              # §3.7.1 — detectors every 5 epochs
+    deterministic: false        # §3.7.3 — deterministic kernels NOT enabled, for
+                                # EITHER architecture, so both train under the same
+                                # conditions. The framework default is True, which
+                                # for RT-DETR-L raises on grid_sample's missing
+                                # deterministic backward. Must be passed explicitly.
+    project: runs               # MUST be resolved to an ABSOLUTE path by the
+                                # harness before being passed to .train().
+                                # A relative value is joined onto Ultralytics'
+                                # global settings.runs_dir, which gives you
+                                # <runs_dir>/detect/runs/train. Either pass
+                                # str(ROOT / "runs"), or set the global once:
+                                #   yolo settings runs_dir="<repo>/runs"
+
+  # Architecture-specific — the rows BELOW the divider in §3.4.3.
+  yolov8m:
+    weights: yolov8m.pt
+    optimizer: SGD              # set explicitly; framework default is 'auto'
+    lr0: 0.01
+    momentum: 0.937
+    weight_decay: 0.0005
+    unfreeze_lr: 0.001          # §3.4.4 — == lr0 * unfreeze_lr_factor
+  rtdetr_l:
+    weights: rtdetr-l.pt
+    optimizer: AdamW            # set explicitly; framework default is 'auto'
+    lr0: 0.0001
+    weight_decay: 0.0001
+    unfreeze_lr: 0.00001        # §3.4.4 — == lr0 * unfreeze_lr_factor
+    # No momentum value is stated for AdamW in §3.4.2. Left unset deliberately.
+
+# --------------------------------------------------------------- generators
+# §3.3. Six runs enumerated in Table 3.7: four production generators
+# (rain light/moderate/heavy, low-light) plus baseline CycleGAN and
+# encoder-only SA-CycleGAN, both at heavy rain only.
+gan:
+  # §3.3.7 — note 256, not 640. The detectors train at 640; the GAN does not.
+  load_size: 286                # resize before crop
+  crop_size: 256                # random crop, the training resolution
+  hflip: true                   # the only augmentation during GAN training
+  batch_size: 1
+
+  optimizer: Adam               # §3.3.7
+  beta1: 0.5
+  beta2: 0.999
+  lr: 0.0002
+  epochs_constant_lr: 100       # §3.3.7 — lr held constant
+  epochs_decay_lr: 100          # §3.3.7 — then linear decay to zero
+  epochs_total: 200
+  save_period: 10               # §3.7.1 — generators every 10 epochs
+
+  generator:
+    arch: resnet9               # §3.3.2 — ResNet-9, 3-stage enc / 9 res / 3-stage dec
+    norm: instance              # §3.3.2 — instance, not batch
+    ngf: 64                     # CONFIRM — not stated in §3.3.2; CycleGAN default
+    output_activation: tanh     # §3.3.2
+  discriminator:
+    arch: patchgan_70           # §3.3.4 — 70x70 PatchGAN
+    n_layers: 4                 # §3.3.4 — four stride-2 conv layers
+    ndf: 64                     # CONFIRM — not stated in §3.3.4; pix2pix default
+    leaky_relu_slope: 0.2       # §3.3.4
+    spectral_norm: true         # §3.3.4 — all conv layers, discriminator ONLY
+
+  attention:
+    # §3.3.3 — SAGAN learnable-gamma, independent scalars, both init 0.
+    encoder: true               # after the third downsampling block
+    decoder: true               # after the residual stack, before first upsample
+    gamma_init: 0.0
+    bottleneck_resolution: 32   # §3.3.3 — attention runs at 32x32
+
+  loss:
+    adversarial: lsgan          # §3.3.5 — least-squares form
+    lambda_cyc: 10.0            # §3.3.5 line 497 — confirmed from the equation image
+    lambda_id: 5.0              # §3.3.5 line 497 — confirmed from the equation image
+    lambda_fc: 1.0              # §3.3.5 — initialised at 1.0
+    lambda_fc_sweep: [0.5, 1.0, 2.0]   # §3.3.5 — pilot sensitivity sweep
+    feature_consistency:
+      network: vgg19            # §3.3.5 — ImageNet-pretrained, frozen
+      layers: [relu1_2, relu2_2, relu3_3, relu4_3]   # §3.3.5 — four-layer set
+      distance: l1              # §3.3.5 — L1, not L2
+      layer_weights: equal      # §3.3.5 — static and equal, not annealed
+      target: "G(x)"            # §3.3.5 — forward output, NOT F(G(x))
+
+# -------------------------------------------------------------- condition B
+# §3.4.5 Table 3.6 — allocation of the N_aug supplementary frames, identical
+# for Conditions B and C. N_aug itself is a pending measurement; see
+# thresholds.yaml. Shares must sum to 1.0.
+condition_b:
+  allocation:
+    rain_light: 0.20
+    rain_moderate: 0.20
+    rain_heavy: 0.20
+    lowlight_moderate: 0.20
+    lowlight_severe: 0.20
+
+# ------------------------------------------------------------------- design
+# §3.5.1, §3.6.4. Counts asserted in code so a design change breaks a test
+# rather than silently changing Chapter IV.
+design:
+  conditions: [A, B, C]
+  architectures: [yolov8m, rtdetr_l]
+  severity_bins:                # §3.5.1 — seven bins
+    - clear
+    - rain_light
+    - rain_moderate
+    - rain_heavy
+    - lum_moderate
+    - lum_severe
+    - compound_heavyrain_severelowlight
+  checkpoints: [stage1, stage2]
+  detector_runs: 30             # 3 conditions x 2 arch x 5 folds
+  model_states: 60              # x 2 checkpoints
+  inference_evaluations: 420    # 60 x 7 bins
+  generator_runs: 6             # Table 3.7
+  primary_metric: "mAP@0.5:0.95"        # D5
+  confirmatory_comparison: "A_vs_C_pooled_stage1"   # §3.6.4, family of one
+  confirmatory_alpha: 0.05
