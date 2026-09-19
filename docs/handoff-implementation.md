@@ -8,8 +8,9 @@ it when a task touches methodology, scheduling, or what is and isn't done.
 
 ## 1 · Manuscript state
 
-**MANUSCRIPT 5** is the current version. Frozen, but twelve edits are open —
-all specified with exact find/replace in `docs/fix-sheet-manuscript-5.md`.
+**MANUSCRIPT 6** is the current version. Fix-sheet edits M2–M12 applied
+(M1 blocked on µY histogram; M2/M5/M7/M8/M9/M10 were already in v6).
+Ratios at line 549 corrected to 1.273×/1.390×. Remaining open items below.
 
 Decided as of 2026-09-19:
 
@@ -27,8 +28,8 @@ the µY histogram, the IR fraction, or the timing pilot. 46 are blank `[[ ]]`
 Chapter IV result cells and are supposed to be empty. Nothing left is a
 decision being avoided.
 
-`check_manuscript.py` (11 checks) is the verifier. It is a loose local script,
-not in this repo — locate it and commit it.
+`scripts/check_manuscript.py` (7 checks + placeholder inventory) is the
+verifier. Committed to repo 2026-09-19.
 
 ## 2 · Environment
 
@@ -59,16 +60,21 @@ checkpoint intervals bound loss to ~2 h and <1 h.
 ## 3 · What is built
 
 ```
-configs/base.yaml         every §3.3/§3.4 hyperparameter, each citing its section
-configs/thresholds.yaml   pending measurements as nulls
-src/util/config.py        loader that RAISES PendingMeasurement
+configs/base.yaml            every §3.3/§3.4 hyperparameter, each citing its section
+configs/thresholds.yaml      pending measurements as nulls
+src/util/config.py           loader that RAISES PendingMeasurement
 src/stats/nadeau_bengio.py
 src/stats/holm.py
-tests/test_stats.py       16 tests, all passing
-scripts/model_complexity.py
+src/data/manifest.py         manifest schema + Pool-A builder + validator (Step 10)
+tests/test_stats.py          16 tests, all passing
+tests/test_manifest.py       56 tests, all passing  (72 total)
+scripts/model_complexity.py  Table 3.11 — YOLOv8m 79.3 / RT-DETR-L 110.2 GFLOPs
+scripts/timing_pilot.py      §3.7.1 epoch-timing + peak-GPU-memory probe (Step 29)
+scripts/gan_memory_probe.py  SA-CycleGAN 6-GB fit probe (no dataloader, ~20 steps)
+scripts/check_manuscript.py  manuscript verifier (7 checks + placeholder inventory)
 ```
 
-`src/data/`, `src/gan/` and `src/detect/` are empty.
+`src/gan/` and `src/detect/` are empty — generators and detectors not yet written.
 
 ### Verified statistics values — regression tests, not guesses
 
@@ -101,14 +107,8 @@ short.
 
 ### Also open
 
-- **Table 3.11 GFLOPs.** The recorded 108.3 unfused / 110.2 fused for RT-DETR-L
-  came from the broken thop install and the labels are reversed. Under
-  ultralytics-thop 2.1.6 the summary reports 110.2 unfused and 105.7 fused.
-  Re-measure **both** architectures with `scripts/model_complexity.py` and
-  update Table 3.11 and the ratios at line 547 (currently 1.27× and 1.37×).
-  Note the script prints MACs and GFLOPs separately: GFLOPs = 2 × MACs, which
-  is the Ultralytics convention. §3.6.3 calls it "multiply–accumulate
-  complexity… in GFLOPs", which is loose by a factor of two — fix the wording.
+- **Table 3.11 GFLOPs.** ✅ Corrected. YOLOv8m 79.3 / RT-DETR-L 110.2 GFLOPs
+  unfused. Ratios updated to 1.273× params / 1.390× GFLOPs at manuscript line 549.
 - **The null-result email.** Never sent. Frame it as a *power* question: the
   confirmatory comparison detects only d_z ≥ 1.86 and has 80% power only at
   2.40, so a non-significant result is likely even if SA-CycleGAN helps
@@ -120,18 +120,20 @@ short.
 
 ## 5 · Next steps
 
-1. **Timing pilot (Step 29).** YOLOv8m and RT-DETR-L, one epoch each on ~500
-   ALIVE frames at 640. Record sec/epoch and peak memory. Produces the run
-   schedule and substantiates §3.7.1's checkpoint-interval claim, which is
-   currently written as though measured.
-2. **GAN memory probe.** `src/gan/` is empty — there is no CycleGAN to time.
-   Instantiate two ResNet-9 generators, two spectral-norm PatchGANs and a
-   frozen VGG-19, run ~20 optimizer steps at 256×256 batch 1, read peak memory.
-   Answers "does it fit in 6 GB" weeks before the real generator exists.
-3. **Step 10, the manifest schema.** All three authors, ~1 hour, needs no CSMO
-   footage — define it and test against Pool A plus synthetic rows. Freeze
-   before Phase 2 or 3 starts; it is the interface all three code against.
-4. Split: D → Phase 2 (steps 10–17), G → Phase 3 (18–26), E → Phase 4 (27–30).
+Steps 29 (timing pilot), GAN memory probe, and Step 10 (manifest) are all
+done as of 2026-09-19. Next:
+
+**Split by track — runs in parallel once CSMO footage arrives:**
+- D → Phase 2 (steps 10–17): detector training harness, fold runner, eval
+- G → Phase 3 (steps 18–26): SA-CycleGAN training loop, `src/gan/`
+- E → Phase 4 (steps 27–30): latency benchmarking on lab RTX 3060
+
+**Immediate unblocked work (no footage needed):**
+- Run `scripts/timing_pilot.py` on the actual g29_demo.mp4 and fill in
+  §3.7.1's checkpoint-interval claim with measured numbers.
+- Run `scripts/gan_memory_probe.py` to confirm 6 GB fit, record result in
+  `runs/gan_memory_probe.json`.
+- Resolve the CSMO footage request (see §4 above) — it gates Phase 2 and 3.
 
 The full 43-step plan is `claude/build-plan-step-by-step.md` in the claude.ai
 project, along with the per-track handoffs `handoff-track-D / E / G.md`.
