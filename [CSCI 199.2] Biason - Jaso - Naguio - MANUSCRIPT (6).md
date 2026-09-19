@@ -808,7 +808,7 @@ Latency is additionally reported as a function of severity bin. Zhao et al. \[25
 | Architecture | Parameters | GFLOPs | Ratio to YOLOv8m (params / GFLOPs) |
 | :---- | ----: | ----: | :---: |
 | YOLOv8m | 25,902,640 | 79.3 | 1.00 / 1.00 |
-| RT-DETR-L | 32,970,476 | 108.3 | 1.27 / 1.37 |
+| RT-DETR-L | 32,970,476 | 110.2 | 1.273 / 1.390 |
 
 Figures are computed with the thop library on the unfused model and are reported as FLOPs, obtained as twice the multiply–accumulate count. Layer fusion at inference alters the reported figure slightly; the unfused value is reported throughout for consistency with the parameter counts, which fusion does not change. Complexity is reported at the input resolution fixed in Section 3.4.1, since a multiply–accumulate figure is not interpretable without one. 
 

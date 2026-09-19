@@ -18,6 +18,7 @@ from torchvision import transforms
 
 __all__ = [
     "compute_fid",
+    "compute_kid",
     "compute_lpips",
     "evaluate_generator",
     "compare_ablations",
@@ -126,6 +127,80 @@ def compute_fid(
 
 
 # ---------------------------------------------------------------------------
+# KID
+# ---------------------------------------------------------------------------
+
+def compute_kid(
+    real_dir: Path,
+    fake_dir: Path,
+    *,
+    device: str = "cuda",
+    batch_size: int = 32,
+    max_samples: int | None = None,
+    subsets: int = 100,
+    subset_size: int = 1000,
+) -> tuple[float, float]:
+    """Compute KID between real_dir and fake_dir.
+
+    Returns (kid_mean, kid_std). Lower is better.
+    Uses torchmetrics.image.KernelInceptionDistance with polynomial kernel.
+    Images resized to 299×299, normalized to [0, 255] uint8.
+
+    KID is an unbiased estimator of squared MMD under a polynomial kernel
+    (Binkowski et al.). Unlike FID it requires no Gaussian assumption and no
+    covariance estimation; at the sample sizes in this study it is the more
+    appropriate distributional metric (§3.6.1).
+    """
+    try:
+        from torchmetrics.image import KernelInceptionDistance
+    except ImportError as exc:
+        raise ImportError(
+            "torchmetrics is required for KID.  "
+            "Install with: pip install torchmetrics[image]"
+        ) from exc
+
+    dev = torch.device(device if torch.cuda.is_available() or device == "cpu" else "cpu")
+
+    # KID expects uint8 tensors in [0, 255], shape (N, 3, H, W) when normalize=False.
+    # Matches compute_fid's preprocessing for consistency.
+    to_tensor = transforms.Compose([
+        transforms.Resize((299, 299)),
+        transforms.ToTensor(),                        # float [0, 1]
+        transforms.Lambda(lambda t: (t * 255).to(torch.uint8)),
+    ])
+
+    real_paths = _image_paths(real_dir)
+    fake_paths = _image_paths(fake_dir)
+    if max_samples is not None:
+        real_paths = real_paths[:max_samples]
+        fake_paths = fake_paths[:max_samples]
+
+    kid = KernelInceptionDistance(
+        normalize=False,
+        subsets=subsets,
+        subset_size=subset_size,
+    ).to(dev)
+
+    real_loader = DataLoader(
+        _ImgDataset(real_paths, to_tensor),
+        batch_size=batch_size, shuffle=False, num_workers=0,
+    )
+    fake_loader = DataLoader(
+        _ImgDataset(fake_paths, to_tensor),
+        batch_size=batch_size, shuffle=False, num_workers=0,
+    )
+
+    with torch.no_grad():
+        for batch in real_loader:
+            kid.update(batch.to(dev), real=True)
+        for batch in fake_loader:
+            kid.update(batch.to(dev), real=False)
+
+    kid_mean, kid_std = kid.compute()
+    return float(kid_mean), float(kid_std)
+
+
+# ---------------------------------------------------------------------------
 # LPIPS
 # ---------------------------------------------------------------------------
 
@@ -200,17 +275,36 @@ def evaluate_generator(
     *,
     device: str = "cuda",
     fid_batch: int = 32,
+    kid_batch: int = 32,
+    kid_subsets: int = 100,
+    kid_subset_size: int = 1000,
     lpips_batch: int = 16,
     lpips_net: str = "alex",
 ) -> dict:
-    """Run both FID and LPIPS, return a summary dict.
+    """Run FID, KID, and LPIPS; return a summary dict.
 
-    Returns {"fid": float, "lpips_mean": float, "n_pairs": int, "n_real": int, "n_fake": int}.
+    Returns {
+        "fid": float,
+        "kid_mean": float,
+        "kid_std": float,
+        "lpips_mean": float,
+        "n_pairs": int,
+        "n_real": int,
+        "n_fake": int,
+    }.
+
+    KID is taken as authoritative when FID and KID order configurations
+    differently (§3.6.1 line 764).
     """
     n_real = len(_image_paths(real_dir))
     n_fake = len(_image_paths(fake_dir))
 
     fid_score = compute_fid(real_dir, fake_dir, device=device, batch_size=fid_batch)
+    kid_mean, kid_std = compute_kid(
+        real_dir, fake_dir,
+        device=device, batch_size=kid_batch,
+        subsets=kid_subsets, subset_size=kid_subset_size,
+    )
 
     real_by_name = {p.name for p in _image_paths(real_dir)}
     fake_by_name = {p.name for p in _image_paths(fake_dir)}
@@ -223,6 +317,8 @@ def evaluate_generator(
 
     return {
         "fid":        fid_score,
+        "kid_mean":   kid_mean,
+        "kid_std":    kid_std,
         "lpips_mean": lpips_score,
         "n_pairs":    n_pairs,
         "n_real":     n_real,
@@ -243,7 +339,8 @@ def compare_ablations(
     """Evaluate multiple generator configurations and return a comparison DataFrame.
 
     Intended for the D4 ablation: encoder-only vs dual attention at heavy rain.
-    Columns: name, fid, lpips_mean, n_pairs.
+    Columns: name, fid, kid_mean, kid_std, lpips_mean, n_pairs.
+    KID is the authoritative ordering metric when FID and KID disagree (§3.6.1).
     Saves results to results_dir/fid_lpips_ablation.parquet and .csv.
     """
     results_dir.mkdir(parents=True, exist_ok=True)
@@ -254,7 +351,9 @@ def compare_ablations(
         metrics = evaluate_generator(real_dir, fake_dir, device=device)
         rows.append({"name": name, **metrics})
         print(
-            f"  FID={metrics['fid']:.4f}  LPIPS={metrics['lpips_mean']:.4f}"
+            f"  FID={metrics['fid']:.4f}"
+            f"  KID={metrics['kid_mean']:.6f}±{metrics['kid_std']:.6f}"
+            f"  LPIPS={metrics['lpips_mean']:.4f}"
             f"  pairs={metrics['n_pairs']}"
         )
 
@@ -299,6 +398,8 @@ if __name__ == "__main__":
     )
     print(
         f"FID:        {metrics['fid']:.4f}\n"
+        f"KID mean:   {metrics['kid_mean']:.6f}\n"
+        f"KID std:    {metrics['kid_std']:.6f}\n"
         f"LPIPS mean: {metrics['lpips_mean']:.4f}\n"
         f"Pairs:      {metrics['n_pairs']}\n"
         f"Real imgs:  {metrics['n_real']}\n"
